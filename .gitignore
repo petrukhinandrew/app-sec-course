@@ -2,8 +2,8 @@
 .vscode
 codeql-db
 CoreNLP
-demo
 gradle
 workspace
 gradlew
 gradlew.bat
+demo/target
