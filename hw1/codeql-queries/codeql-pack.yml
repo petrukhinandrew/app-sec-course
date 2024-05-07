@@ -1,0 +1,7 @@
+---
+library: false
+warnOnImplicitThis: false
+name: cve-2023-39020
+version: 1.0.0
+dependencies:
+  codeql/java-all: ^0.9.1

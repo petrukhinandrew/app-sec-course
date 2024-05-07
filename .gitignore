@@ -1,4 +1,9 @@
-*
-!.gitignore
-!hw1
-!hw1/README.md
+.gradle
+.vscode
+codeql-db
+CoreNLP
+demo
+gradle
+workspace
+gradlew
+gradlew.bat
