@@ -17,8 +17,6 @@
             <artifactId>stanford-corenlp</artifactId>
             <groupId>edu.stanford.nlp</groupId>
             <version>3.9.2</version>
-            <scope>system</scope>
-            <systemPath>/home/andrew/Documents/app-sec-course/CoreNLP/target/stanford-corenlp-3.9.2.jar</systemPath>
         </dependency>
     </dependencies>
     <build>
