@@ -6,4 +6,5 @@ gradle
 workspace
 gradlew
 gradlew.bat
-demo/target
+hw1/demo/target
+hw1/codeql-queries/QLinspector
