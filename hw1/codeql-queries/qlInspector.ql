@@ -17,7 +17,7 @@ private class CallsDangerousMethod extends Callable {
 
 private class RecursiveCallToDangerousMethod extends Callable {
   RecursiveCallToDangerousMethod() {
-    not this instanceof Sanitizer and
+    // not this instanceof Sanitizer and
     /*
      *      /* can be commented for more results
      */
@@ -46,9 +46,9 @@ private class RecursiveCallToDangerousMethod extends Callable {
   }
 }
 
-private class Sanitizer extends Callable {
-  Sanitizer() { hasName([""]) }
-}
+// private class Sanitizer extends Callable {
+//   Sanitizer() { hasName([""]) }
+// }
 
 query predicate edges(ControlFlowNode node1, ControlFlowNode node2) {
     (node1.(MethodCall).getMethod().getAPossibleImplementation() = node2 and node2 instanceof RecursiveCallToDangerousMethod) or 
