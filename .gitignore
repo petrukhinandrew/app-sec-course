@@ -8,3 +8,4 @@ gradlew
 gradlew.bat
 hw1/demo/target
 hw1/codeql-queries/QLinspector
+hw1/codeql-queries/queries
