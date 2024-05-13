@@ -23,8 +23,14 @@
 package pascal.taie.analysis.dataflow.solver;
 
 import pascal.taie.analysis.dataflow.analysis.DataflowAnalysis;
+import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
+import pascal.taie.analysis.dataflow.fact.SetFact;
 import pascal.taie.analysis.graph.cfg.CFG;
+import pascal.taie.ir.exp.Var;
+
+import java.util.LinkedList;
+import java.util.Queue;
 
 class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
@@ -32,13 +38,43 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
         super(analysis);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        Queue<Node> worklist = new LinkedList<>(cfg.getNodes());
+        while (!worklist.isEmpty()) {
+            Node bb = worklist.poll();
+            CPFact out = (CPFact) result.getOutFact(bb);
+            CPFact in = new CPFact();
+            for (Node n : cfg.getPredsOf(bb)) {
+                analysis.meetInto(result.getOutFact(n), (Fact) in);
+            }
+            if (analysis.transferNode(bb, (Fact) in, (Fact) out)) {
+                cfg.getSuccsOf(bb).forEach(worklist::offer);
+            }
+            result.setInFact(bb, (Fact) in);
+            result.setOutFact(bb, (Fact) out);
+        }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        boolean go = true;
+        while (go) {
+            go = false;
+            for (Node node : cfg) {
+                SetFact<Var> out = new SetFact<>();
+                SetFact<Var> in = (SetFact<Var>) result.getInFact(node);
+                for (Node succ : cfg.getSuccsOf(node)) {
+                    out.union((SetFact<Var>) result.getInFact(succ));
+                }
+                if (analysis.transferNode(node, (Fact) in, (Fact) out)) {
+                    go = true;
+                }
+                result.setInFact(node, (Fact) in);
+                result.setOutFact(node, (Fact) out);
+            }
+        }
     }
 }

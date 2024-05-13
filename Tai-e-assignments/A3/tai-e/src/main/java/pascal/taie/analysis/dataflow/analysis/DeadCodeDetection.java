@@ -44,10 +44,9 @@ import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
+import pascal.taie.util.collection.Pair;
 
-import java.util.Comparator;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -62,16 +61,80 @@ public class DeadCodeDetection extends MethodAnalysis {
         // obtain CFG
         CFG<Stmt> cfg = ir.getResult(CFGBuilder.ID);
         // obtain result of constant propagation
-        DataflowResult<Stmt, CPFact> constants =
-                ir.getResult(ConstantPropagation.ID);
+        DataflowResult<Stmt, CPFact> constants = ir.getResult(ConstantPropagation.ID);
         // obtain result of live variable analysis
-        DataflowResult<Stmt, SetFact<Var>> liveVars =
-                ir.getResult(LiveVariableAnalysis.ID);
+        DataflowResult<Stmt, SetFact<Var>> liveVars = ir.getResult(LiveVariableAnalysis.ID);
         // keep statements (dead code) sorted in the resulting set
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        // TODO - finish me
-        // Your task is to recognize dead code in ir and add it to deadCode
+        Set<Stmt> liveCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        Queue<Stmt> q = new LinkedList<>();
+        q.add(cfg.getEntry());
+        while (!q.isEmpty()) {
+            Stmt stmt = q.poll();
+            if (stmt instanceof AssignStmt<?, ?> assn) {
+                if (analyzeAssign(assn, q, cfg, liveVars)) {
+                    continue;
+                }
+            }
+            if (!liveCode.add(stmt)) continue;
+            if (stmt instanceof If condSt) {
+                analyzeIf(condSt, q, cfg, constants);
+            } else if (stmt instanceof SwitchStmt switchSt) {
+                analyzeSwitch(switchSt, q, cfg, constants);
+            } else {
+                q.addAll(cfg.getSuccsOf(stmt));
+            }
+        }
+        deadCode.addAll(cfg.getNodes());
+        deadCode.removeAll(liveCode);
+        deadCode.remove(cfg.getExit());
         return deadCode;
+    }
+
+    /**
+     * @return true if it's dead assignment
+     */
+    private static boolean analyzeAssign(AssignStmt<?, ?> assn, Queue<Stmt> q, CFG<Stmt> cfg, DataflowResult<Stmt, SetFact<Var>> liveVars) {
+        boolean res = false;
+        if (assn.getLValue() instanceof Var v) {
+            System.out.println(v.getName() + liveVars.getOutFact(assn).contains(v));
+            if (!liveVars.getOutFact(assn).contains(v) && hasNoSideEffect(assn.getRValue())) {
+                res = true;
+            }
+        }
+        q.addAll(cfg.getSuccsOf(assn));
+        return res;
+    }
+
+    private static void analyzeIf(If stmt, Queue<Stmt> q, CFG<Stmt> cfg, DataflowResult<Stmt, CPFact> constants) {
+        Value cond = ConstantPropagation.evaluate(stmt.getCondition(), constants.getInFact(stmt));
+        if (!cond.isConstant()) {
+            q.addAll(cfg.getSuccsOf(stmt));
+        }
+        for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)) {
+            if ((cond.getConstant() == 1 && edge.getKind() == Edge.Kind.IF_TRUE) || (cond.getConstant() == 0 && edge.getKind() == Edge.Kind.IF_FALSE)) {
+                q.add(edge.getTarget());
+            }
+        }
+    }
+
+    private static void analyzeSwitch(SwitchStmt switchSt, Queue<Stmt> q, CFG<Stmt> cfg, DataflowResult<Stmt, CPFact> constants) {
+        Value val = ConstantPropagation.evaluate(switchSt.getVar(), constants.getInFact(switchSt));
+        if (!val.isConstant()) {
+            q.addAll(cfg.getSuccsOf(switchSt));
+        }
+        boolean nonDefaultReachable = false;
+        for (Pair<Integer, Stmt> pair : switchSt.getCaseTargets()) {
+            Integer branch = pair.first();
+            Stmt target = pair.second();
+            if (branch == val.getConstant()) {
+                nonDefaultReachable = true;
+                q.add(target);
+            }
+        }
+        if (!nonDefaultReachable) {
+            q.add(switchSt.getDefaultTarget());
+        }
     }
 
     /**
