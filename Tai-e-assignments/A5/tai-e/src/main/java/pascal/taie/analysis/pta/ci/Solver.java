@@ -129,7 +129,7 @@ class Solver {
             if (!stmt.isStatic()) return null;
             Pointer rhs = pointerFlowGraph.getVarPtr(stmt.getRValue());
             Pointer lhsf = pointerFlowGraph.getStaticField(stmt.getFieldRef().resolve());
-            addPFGEdge(lhsf, rhs);
+            addPFGEdge(rhs, lhsf);
             return null;
         }
 
@@ -181,10 +181,10 @@ class Solver {
                 Var v = vp.getVar();
                 for (Obj o : delta) {
                     for (StoreField sf : v.getStoreFields()) {
-                        addPFGEdge(pointerFlowGraph.getVarPtr(sf.getRValue()), pointerFlowGraph.getStaticField(sf.getFieldRef().resolve()));
+                        addPFGEdge(pointerFlowGraph.getVarPtr(sf.getRValue()), pointerFlowGraph.getInstanceField(o, sf.getFieldRef().resolve()));
                     }
                     for (LoadField lf : v.getLoadFields()) {
-                        addPFGEdge(pointerFlowGraph.getStaticField(lf.getFieldRef().resolve()), pointerFlowGraph.getVarPtr(lf.getLValue()));
+                        addPFGEdge(pointerFlowGraph.getInstanceField(o, lf.getFieldRef().resolve()), pointerFlowGraph.getVarPtr(lf.getLValue()));
                     }
 
                     for (StoreArray sa : v.getStoreArrays()) {
@@ -206,7 +206,7 @@ class Solver {
     private PointsToSet propagate(Pointer pointer, PointsToSet pointsToSet) {
         PointsToSet diff = new PointsToSet();
         pointsToSet.objects().filter(obj -> !pointer.getPointsToSet().contains(obj)).forEach(diff::addObject);
-        if (diff.isEmpty()) {
+        if (!diff.isEmpty()) {
             diff.forEach(o -> pointer.getPointsToSet().addObject(o));
             pointerFlowGraph.getSuccsOf(pointer).forEach(succ -> workList.addEntry(succ, diff));
         }
