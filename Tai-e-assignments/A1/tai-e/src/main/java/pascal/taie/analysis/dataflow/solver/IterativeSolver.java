@@ -46,16 +46,12 @@ class IterativeSolver<Node, Fact> extends Solver<Node, Fact> {
         while (go) {
             go = false;
             for (Node node : cfg) {
-                SetFact<Var> out = new SetFact<>();
-                SetFact<Var> in = (SetFact<Var>) result.getInFact(node);
+                Fact out = (Fact) new SetFact<>();
                 for (Node succ : cfg.getSuccsOf(node)) {
-                    out.union((SetFact<Var>) result.getInFact(succ));
+                    analysis.meetInto(result.getInFact(succ), out);
                 }
-                if (analysis.transferNode(node, (Fact) in, (Fact) out)) {
-                    go = true;
-                }
-                result.setInFact(node, (Fact) in);
-                result.setOutFact(node, (Fact) out);
+                result.setOutFact(node, out);
+                go |= analysis.transferNode(node, result.getInFact(node), result.getOutFact(node));
             }
         }
     }

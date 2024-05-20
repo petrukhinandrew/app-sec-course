@@ -29,6 +29,8 @@ import pascal.taie.ir.exp.Exp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Stmt;
 
+import java.util.Set;
+
 /**
  * Implementation of classic live variable analysis.
  */
@@ -64,17 +66,17 @@ public class LiveVariableAnalysis extends
     @Override
     public boolean transferNode(Stmt stmt, SetFact<Var> in, SetFact<Var> out) {
         SetFact<Var> backup = in.copy();
-        in.union(out);
+        meetInto(out, in);
         stmt.getDef().ifPresent(lv -> {
-            if (lv instanceof Var) {
-                in.remove((Var)lv);
+            if (lv instanceof Var v) {
+                in.remove(v);
             }
         });
-        for (Exp exp: stmt.getUses()) {
-            if (exp instanceof Var) {
-                in.add((Var)exp);
+        stmt.getUses().forEach(e -> {
+            if (e instanceof Var v) {
+                in.add(v);
             }
-        }
+        });
         return !backup.equals(in);
     }
 }

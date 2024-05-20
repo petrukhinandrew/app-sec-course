@@ -42,16 +42,17 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
         Queue<Node> worklist = new LinkedList<>(cfg.getNodes());
         while (!worklist.isEmpty()) {
             Node bb = worklist.poll();
-            CPFact out = (CPFact) result.getOutFact(bb);
-            CPFact in = new CPFact();
+            Fact out = result.getOutFact(bb);
+            Fact in = (Fact) new CPFact();
             for (Node n : cfg.getPredsOf(bb)) {
-                analysis.meetInto(result.getOutFact(n), (Fact) in);
+                analysis.meetInto(result.getOutFact(n), in);
             }
-            if (analysis.transferNode(bb, (Fact) in, (Fact) out)) {
-                cfg.getSuccsOf(bb).forEach(worklist::offer);
+
+            result.setInFact(bb, in);
+
+            if (analysis.transferNode(bb, in, out)) {
+                worklist.addAll(cfg.getSuccsOf(bb));
             }
-            result.setInFact(bb, (Fact) in);
-            result.setOutFact(bb, (Fact) out);
         }
     }
 

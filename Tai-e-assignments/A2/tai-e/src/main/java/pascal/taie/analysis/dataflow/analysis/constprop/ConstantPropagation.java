@@ -26,6 +26,7 @@ import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.exp.*;
+import pascal.taie.ir.stmt.AssignStmt;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.language.type.PrimitiveType;
@@ -77,29 +78,21 @@ public class ConstantPropagation extends
         if (v1.isNAC() || v2.isNAC()) {
             return Value.getNAC();
         }
-        if (v1.isConstant() && v2.isConstant()) {
-            if (v1.getConstant() == v2.getConstant()) {
-                return Value.makeConstant(v1.getConstant());
-            } else {
-                return Value.getNAC();
-            }
-        }
-        if (v1.isUndef() && v2.isConstant()) {
-            return Value.makeConstant(v2.getConstant());
-        }
-        if (v2.isUndef() && v1.isConstant()) {
+        if (v1.isUndef()) return v2;
+        if (v2.isUndef()) return v1;
+
+        if (v1.isConstant() && v2.isConstant() && v1.getConstant() == v2.getConstant()) {
             return Value.makeConstant(v1.getConstant());
         }
-        return Value.getUndef();
+        return Value.getNAC();
     }
 
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        boolean changes = false;
-        for (Map.Entry<Var, Value> e: in.entries().toList()) {
-            changes |= out.update(e.getKey(), e.getValue());
-        }
-        if (stmt instanceof DefinitionStmt<?,?> def) {
+        boolean changes = out.copyFrom(in);
+        ;
+
+        if (stmt instanceof DefinitionStmt<?, ?> def) {
             if (def.getLValue() instanceof Var lvar && canHoldInt(lvar)) {
                 CPFact tmp = in.copy();
                 Value removedVal = tmp.get(lvar);
@@ -109,6 +102,7 @@ public class ConstantPropagation extends
                 changes |= !removedVal.equals(rval);
             }
         }
+
         return changes;
     }
 
@@ -141,35 +135,36 @@ public class ConstantPropagation extends
         if (exp instanceof IntLiteral lit) {
             return Value.makeConstant(lit.getValue());
         }
+
         if (exp instanceof Var v) {
-            return in.get(v).isConstant() ? Value.makeConstant(in.get(v).getConstant()) : in.get(v);
+            return in.get(v);
         }
+
         if (exp instanceof BinaryExp bexp) {
             Value lhs = evaluate(bexp.getOperand1(), in);
             Value rhs = evaluate(bexp.getOperand2(), in);
-            if (zeroDivMod(bexp.getOperator(), rhs)) {
-                return Value.getUndef();
-            }
-            if (lhs.isConstant() && rhs.isConstant()) {
-                int lc = lhs.getConstant();
-                int rc = rhs.getConstant();
-                if (bexp.getOperator() instanceof ArithmeticExp.Op op) {
-                    return evalArithm(op, lc, rc);
-                }
-                if (bexp.getOperator() instanceof ShiftExp.Op op) {
-                    return evalShift(op, lc, rc);
-                }
-                if (bexp.getOperator() instanceof BitwiseExp.Op op) {
-                    return evalBitw(op, lc, rc);
-                }
-                if (bexp.getOperator() instanceof ConditionExp.Op op) {
-                    return evalCond(op, lc, rc);
-                }
-            }
+
             if (lhs.isNAC() || rhs.isNAC()) {
                 return Value.getNAC();
             }
-            return Value.getUndef();
+
+            if (!lhs.isConstant() || !rhs.isConstant()) {
+                return Value.getUndef();
+            }
+            int lc = lhs.getConstant();
+            int rc = rhs.getConstant();
+            if (bexp.getOperator() instanceof ArithmeticExp.Op op) {
+                return evalArithm(op, lc, rc);
+            }
+            if (bexp.getOperator() instanceof ShiftExp.Op op) {
+                return evalShift(op, lc, rc);
+            }
+            if (bexp.getOperator() instanceof BitwiseExp.Op op) {
+                return evalBitw(op, lc, rc);
+            }
+            if (bexp.getOperator() instanceof ConditionExp.Op op) {
+                return evalCond(op, lc, rc);
+            }
         }
         return Value.getNAC();
     }
