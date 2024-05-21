@@ -86,32 +86,29 @@ public class ConstantPropagation extends
         if (v1.isNAC() || v2.isNAC()) {
             return Value.getNAC();
         }
-        if (v1.isConstant() && v2.isConstant()) {
-            if (v1.getConstant() == v2.getConstant()) {
-                return Value.makeConstant(v1.getConstant());
-            } else {
-                return Value.getNAC();
-            }
-        }
-        if (v1.isUndef() && v2.isConstant()) {
-            return Value.makeConstant(v2.getConstant());
-        }
-        if (v2.isUndef() && v1.isConstant()) {
+        if (v1.isUndef()) return v2;
+        if (v2.isUndef()) return v1;
+
+        if (v1.isConstant() && v2.isConstant() && v1.getConstant() == v2.getConstant()) {
             return Value.makeConstant(v1.getConstant());
         }
-        return Value.getUndef();
+        return Value.getNAC();
     }
 
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        CPFact inCopy = in.copy();
+        boolean changes = out.copyFrom(in);
         if (stmt instanceof DefinitionStmt<?, ?> def) {
             if (def.getLValue() instanceof Var lvar && canHoldInt(lvar)) {
-                inCopy.update(lvar, evaluate(def.getRValue(), in));
-                return out.copyFrom(inCopy);
+                CPFact tmp = in.copy();
+                Value removedVal = tmp.get(lvar);
+                tmp.remove(lvar);
+                Value rval = evaluate(def.getRValue(), in);
+                out.update(lvar, rval);
+                changes |= !removedVal.equals(rval);
             }
         }
-        return out.copyFrom(in);
+        return changes;
     }
 
 
@@ -144,35 +141,36 @@ public class ConstantPropagation extends
         if (exp instanceof IntLiteral lit) {
             return Value.makeConstant(lit.getValue());
         }
+
         if (exp instanceof Var v) {
-            return in.get(v).isConstant() ? Value.makeConstant(in.get(v).getConstant()) : in.get(v);
+            return in.get(v);
         }
+
         if (exp instanceof BinaryExp bexp) {
             Value lhs = evaluate(bexp.getOperand1(), in);
             Value rhs = evaluate(bexp.getOperand2(), in);
-            if (zeroDivMod(bexp.getOperator(), rhs)) {
-                return Value.getUndef();
-            }
-            if (lhs.isConstant() && rhs.isConstant()) {
-                int lc = lhs.getConstant();
-                int rc = rhs.getConstant();
-                if (bexp.getOperator() instanceof ArithmeticExp.Op op) {
-                    return evalArithm(op, lc, rc);
-                }
-                if (bexp.getOperator() instanceof ShiftExp.Op op) {
-                    return evalShift(op, lc, rc);
-                }
-                if (bexp.getOperator() instanceof BitwiseExp.Op op) {
-                    return evalBitw(op, lc, rc);
-                }
-                if (bexp.getOperator() instanceof ConditionExp.Op op) {
-                    return evalCond(op, lc, rc);
-                }
-            }
+
             if (lhs.isNAC() || rhs.isNAC()) {
                 return Value.getNAC();
             }
-            return Value.getUndef();
+
+            if (!lhs.isConstant() || !rhs.isConstant() || zeroDivMod(bexp.getOperator(), rhs)) {
+                return Value.getUndef();
+            }
+            int lc = lhs.getConstant();
+            int rc = rhs.getConstant();
+            if (bexp.getOperator() instanceof ArithmeticExp.Op op) {
+                return evalArithm(op, lc, rc);
+            }
+            if (bexp.getOperator() instanceof ShiftExp.Op op) {
+                return evalShift(op, lc, rc);
+            }
+            if (bexp.getOperator() instanceof BitwiseExp.Op op) {
+                return evalBitw(op, lc, rc);
+            }
+            if (bexp.getOperator() instanceof ConditionExp.Op op) {
+                return evalCond(op, lc, rc);
+            }
         }
         return Value.getNAC();
     }
@@ -216,10 +214,8 @@ public class ConstantPropagation extends
 
     private static boolean zeroDivMod(BinaryExp.Op exp, Value v) {
         if (exp instanceof ArithmeticExp.Op op) {
-            if (op == ArithmeticExp.Op.DIV || op == ArithmeticExp.Op.REM) {
-                return zeroConst(v);
-            }
-            return false;
+            return (op == ArithmeticExp.Op.DIV || op == ArithmeticExp.Op.REM)
+                    && zeroConst(v);
         }
         return false;
     }

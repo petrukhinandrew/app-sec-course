@@ -33,6 +33,7 @@ import pascal.taie.analysis.graph.icfg.ReturnEdge;
 import pascal.taie.config.AnalysisConfig;
 import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.InvokeExp;
+import pascal.taie.ir.exp.LValue;
 import pascal.taie.ir.exp.RValue;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Invoke;
@@ -89,16 +90,13 @@ public class InterConstantPropagation extends
 
     @Override
     protected CPFact transferNormalEdge(NormalEdge<Stmt> edge, CPFact out) {
-        return out.copy();
+        return out;
     }
 
     @Override
     protected CPFact transferCallToReturnEdge(CallToReturnEdge<Stmt> edge, CPFact out) {
-        Var lv = ((Invoke) edge.getSource()).getLValue();
         CPFact transfer = out.copy();
-        if(lv != null){
-            transfer.remove(lv);
-        }
+        edge.getSource().getDef().ifPresent(v -> transfer.remove((Var)v));
         return transfer;
     }
 

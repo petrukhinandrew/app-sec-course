@@ -78,20 +78,19 @@ class InterSolver<Method, Node, Fact> {
     }
 
     private void doSolve() {
-        Queue<Node> wl = new LinkedList<>(icfg.getNodes());
-        wl.addAll(icfg.getNodes());
-        while (!wl.isEmpty()) {
-            Node cur = wl.poll();
-            Fact in = result.getInFact(cur);
-            Fact out = result.getOutFact(cur);
+        workList = new LinkedList<>(icfg.getNodes());
+        workList.addAll(icfg.getNodes());
+        while (!workList.isEmpty()) {
+            Node cur = workList.poll();
             for (ICFGEdge<Node> e : icfg.getInEdgesOf(cur)) {
-                analysis.meetInto(analysis.transferEdge(e, result.getOutFact(e.getSource())), in);
+                analysis.meetInto(
+                        analysis.transferEdge(e, result.getOutFact(e.getSource())),
+                        result.getInFact(cur)
+                );
             }
-            if (analysis.transferNode(cur, in, out)) {
-                icfg.getSuccsOf(cur).forEach(wl::offer);
+            if (analysis.transferNode(cur, result.getInFact(cur), result.getOutFact(cur))) {
+                workList.addAll(icfg.getSuccsOf(cur));
             }
-            result.setInFact(cur, in);
-            result.setOutFact(cur, out);
         }
     }
 }

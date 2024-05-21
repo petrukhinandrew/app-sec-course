@@ -93,13 +93,12 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
     private Set<JMethod> resolve(Invoke callSite) {
         Set<JMethod> T = new HashSet<>();
         MethodRef m = callSite.getMethodRef();
-        if (callSite.isSpecial()) {
-            JMethod mbMethod = dispatch(m.getDeclaringClass(), m.getSubsignature());
-            T.add(mbMethod);
-            return T;
-        }
         if (callSite.isStatic()) {
             T.add(m.getDeclaringClass().getDeclaredMethod(m.getSubsignature()));
+            return T;
+        }
+        if (callSite.isSpecial()) {
+            T.add(dispatch(m.getDeclaringClass(), m.getSubsignature()));
             return T;
         }
         if (callSite.isVirtual() || callSite.isInterface()) {
