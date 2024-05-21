@@ -101,35 +101,35 @@ class Solver {
     private class StmtProcessor implements StmtVisitor<Void> {
         @Override
         public Void visit(New stmt) {
-            Pointer lhs = pointerFlowGraph.getVarPtr(stmt.getLValue());
-            PointsToSet target = new PointsToSet(heapModel.getObj(stmt));
-            workList.addEntry(lhs, target);
+            Pointer x = pointerFlowGraph.getVarPtr(stmt.getLValue());
+            PointsToSet t = new PointsToSet(heapModel.getObj(stmt));
+            workList.addEntry(x, t);
             return null;
         }
 
         @Override
         public Void visit(Copy stmt) {
-            Pointer lhs = pointerFlowGraph.getVarPtr(stmt.getLValue());
-            Pointer rhs = pointerFlowGraph.getVarPtr(stmt.getRValue());
-            addPFGEdge(rhs, lhs);
+            Pointer x = pointerFlowGraph.getVarPtr(stmt.getLValue());
+            Pointer y = pointerFlowGraph.getVarPtr(stmt.getRValue());
+            addPFGEdge(y, x);
             return null;
         }
 
         @Override
         public Void visit(LoadField stmt) {
             if (!stmt.isStatic()) return null;
-            Pointer lhs = pointerFlowGraph.getVarPtr(stmt.getLValue());
-            Pointer rhsf = pointerFlowGraph.getStaticField(stmt.getFieldRef().resolve());
-            addPFGEdge(rhsf, lhs);
+            Pointer x = pointerFlowGraph.getVarPtr(stmt.getLValue());
+            Pointer y = pointerFlowGraph.getStaticField(stmt.getFieldRef().resolve());
+            addPFGEdge(y, x);
             return null;
         }
 
         @Override
         public Void visit(StoreField stmt) {
             if (!stmt.isStatic()) return null;
-            Pointer rhs = pointerFlowGraph.getVarPtr(stmt.getRValue());
-            Pointer lhsf = pointerFlowGraph.getStaticField(stmt.getFieldRef().resolve());
-            addPFGEdge(rhs, lhsf);
+            Pointer x = pointerFlowGraph.getStaticField(stmt.getFieldRef().resolve());
+            Pointer y = pointerFlowGraph.getVarPtr(stmt.getRValue());
+            addPFGEdge(y, x);
             return null;
         }
 
@@ -225,8 +225,7 @@ class Solver {
             workList.addEntry(pointerFlowGraph.getVarPtr(callee.getIR().getThis()), new PointsToSet(recv));
             if (callGraph.addEdge(new Edge<>(CallGraphs.getCallKind(cs), cs, callee))) {
                 addReachable(callee);
-
-                for (int i = 0; i < cs.getInvokeExp().getArgCount(); ++i) {
+                for (int i = 0; i < callee.getParamCount(); ++i) {
                     addPFGEdge(pointerFlowGraph.getVarPtr(cs.getInvokeExp().getArg(i)), pointerFlowGraph.getVarPtr(callee.getIR().getParam(i)));
                 }
 
