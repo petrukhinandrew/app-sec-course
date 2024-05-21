@@ -78,8 +78,10 @@ public class ConstantPropagation extends
         if (v1.isNAC() || v2.isNAC()) {
             return Value.getNAC();
         }
-        if (v1.isUndef()) return v2;
-        if (v2.isUndef()) return v1;
+        if (v1.isUndef())
+            return v2;
+        if (v2.isUndef())
+            return v1;
 
         if (v1.isConstant() && v2.isConstant() && v1.getConstant() == v2.getConstant()) {
             return Value.makeConstant(v1.getConstant());
@@ -90,7 +92,6 @@ public class ConstantPropagation extends
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
         boolean changes = out.copyFrom(in);
-        ;
 
         if (stmt instanceof DefinitionStmt<?, ?> def) {
             if (def.getLValue() instanceof Var lvar && canHoldInt(lvar)) {
@@ -148,9 +149,10 @@ public class ConstantPropagation extends
                 return Value.getNAC();
             }
 
-            if (!lhs.isConstant() || !rhs.isConstant()) {
+            if (!lhs.isConstant() || !rhs.isConstant() || zeroDivMod(bexp.getOperator(), rhs)) {
                 return Value.getUndef();
             }
+
             int lc = lhs.getConstant();
             int rc = rhs.getConstant();
             if (bexp.getOperator() instanceof ArithmeticExp.Op op) {
@@ -208,10 +210,7 @@ public class ConstantPropagation extends
 
     private static boolean zeroDivMod(BinaryExp.Op exp, Value v) {
         if (exp instanceof ArithmeticExp.Op op) {
-            if (op == ArithmeticExp.Op.DIV || op == ArithmeticExp.Op.REM) {
-                return zeroConst(v);
-            }
-            return false;
+            return (op == ArithmeticExp.Op.DIV || op == ArithmeticExp.Op.REM) && zeroConst(v);
         }
         return false;
     }

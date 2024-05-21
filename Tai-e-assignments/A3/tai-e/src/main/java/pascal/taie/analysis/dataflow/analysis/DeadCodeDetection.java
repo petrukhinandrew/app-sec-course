@@ -72,7 +72,8 @@ public class DeadCodeDetection extends MethodAnalysis {
         while (!q.isEmpty()) {
             Stmt stmt = q.poll();
             if (stmt instanceof AssignStmt<?, ?> assn) {
-                if (analyzeAssign(assn, q, cfg, liveVars)) {
+                q.addAll(cfg.getSuccsOf(assn));
+                if (analyzeAssign(assn, liveVars)) {
                     continue;
                 }
             }
@@ -94,15 +95,13 @@ public class DeadCodeDetection extends MethodAnalysis {
     /**
      * @return true if it's dead assignment
      */
-    private static boolean analyzeAssign(AssignStmt<?, ?> assn, Queue<Stmt> q, CFG<Stmt> cfg, DataflowResult<Stmt, SetFact<Var>> liveVars) {
+    private static boolean analyzeAssign(AssignStmt<?, ?> assn, DataflowResult<Stmt, SetFact<Var>> liveVars) {
         boolean res = false;
         if (assn.getLValue() instanceof Var v) {
-            System.out.println(v.getName() + liveVars.getOutFact(assn).contains(v));
             if (!liveVars.getOutFact(assn).contains(v) && hasNoSideEffect(assn.getRValue())) {
                 res = true;
             }
         }
-        q.addAll(cfg.getSuccsOf(assn));
         return res;
     }
 
@@ -110,6 +109,7 @@ public class DeadCodeDetection extends MethodAnalysis {
         Value cond = ConstantPropagation.evaluate(stmt.getCondition(), constants.getInFact(stmt));
         if (!cond.isConstant()) {
             q.addAll(cfg.getSuccsOf(stmt));
+            return;
         }
         for (Edge<Stmt> edge : cfg.getOutEdgesOf(stmt)) {
             if ((cond.getConstant() == 1 && edge.getKind() == Edge.Kind.IF_TRUE) || (cond.getConstant() == 0 && edge.getKind() == Edge.Kind.IF_FALSE)) {
@@ -122,6 +122,7 @@ public class DeadCodeDetection extends MethodAnalysis {
         Value val = ConstantPropagation.evaluate(switchSt.getVar(), constants.getInFact(switchSt));
         if (!val.isConstant()) {
             q.addAll(cfg.getSuccsOf(switchSt));
+            return;
         }
         boolean nonDefaultReachable = false;
         for (Pair<Integer, Stmt> pair : switchSt.getCaseTargets()) {

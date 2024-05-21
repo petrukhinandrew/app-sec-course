@@ -27,7 +27,6 @@ import pascal.taie.analysis.dataflow.analysis.constprop.CPFact;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.dataflow.fact.SetFact;
 import pascal.taie.analysis.graph.cfg.CFG;
-import pascal.taie.ir.exp.Var;
 
 import java.util.LinkedList;
 import java.util.Queue;
@@ -43,37 +42,31 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
         Queue<Node> worklist = new LinkedList<>(cfg.getNodes());
         while (!worklist.isEmpty()) {
-            Node bb = worklist.poll();
-            CPFact out = (CPFact) result.getOutFact(bb);
-            CPFact in = new CPFact();
-            for (Node n : cfg.getPredsOf(bb)) {
-                analysis.meetInto(result.getOutFact(n), (Fact) in);
+            Node node = worklist.poll();
+            Fact in = (Fact) new CPFact();
+            for (Node pred : cfg.getPredsOf(node)) {
+                analysis.meetInto(result.getOutFact(pred), in);
             }
-            if (analysis.transferNode(bb, (Fact) in, (Fact) out)) {
-                cfg.getSuccsOf(bb).forEach(worklist::offer);
+            result.setInFact(node, in);
+            if (analysis.transferNode(node, in, result.getOutFact(node))) {
+                worklist.addAll(cfg.getSuccsOf(node));
             }
-            result.setInFact(bb, (Fact) in);
-            result.setOutFact(bb, (Fact) out);
         }
     }
 
     @SuppressWarnings("unchecked")
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        boolean go = true;
-        while (go) {
-            go = false;
-            for (Node node : cfg) {
-                SetFact<Var> out = new SetFact<>();
-                SetFact<Var> in = (SetFact<Var>) result.getInFact(node);
-                for (Node succ : cfg.getSuccsOf(node)) {
-                    out.union((SetFact<Var>) result.getInFact(succ));
-                }
-                if (analysis.transferNode(node, (Fact) in, (Fact) out)) {
-                    go = true;
-                }
-                result.setInFact(node, (Fact) in);
-                result.setOutFact(node, (Fact) out);
+        Queue<Node> worklist = new LinkedList<>(cfg.getNodes());
+        while (!worklist.isEmpty()) {
+            Node node = worklist.poll();
+            Fact out = (Fact) new SetFact<>();
+            for (Node succ : cfg.getSuccsOf(node)) {
+                analysis.meetInto(result.getInFact(succ), out);
+            }
+            result.setOutFact(node, out);
+            if (analysis.transferNode(node, result.getInFact(node), result.getOutFact(node))) {
+                worklist.addAll(cfg.getPredsOf(node));
             }
         }
     }
