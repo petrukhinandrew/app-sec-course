@@ -31,6 +31,8 @@ import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.Type;
 
+import java.net.ContentHandler;
+
 /**
  * Implementation of 2-type sensitivity.
  */
@@ -43,19 +45,23 @@ public class _2TypeSelector implements ContextSelector {
 
     @Override
     public Context selectContext(CSCallSite callSite, JMethod callee) {
-        // TODO - finish me
-        return null;
+        return callSite.getContext();
     }
 
     @Override
     public Context selectContext(CSCallSite callSite, CSObj recv, JMethod callee) {
-        // TODO - finish me
-        return null;
+        Context ctx = recv.getContext();
+        int cl = ctx.getLength();
+        return switch (cl) {
+            case 0 -> ListContext.make(recv.getObject().getContainerType());
+            default -> ListContext.make(ctx.getElementAt(cl - 1), recv.getObject().getContainerType());
+        };
     }
 
     @Override
     public Context selectHeapContext(CSMethod method, Obj obj) {
-        // TODO - finish me
-        return null;
+        Context ctx = method.getContext();
+        int cl = ctx.getLength();
+        return cl <= 1 ? ctx : ListContext.make(ctx.getElementAt(cl - 1));
     }
 }

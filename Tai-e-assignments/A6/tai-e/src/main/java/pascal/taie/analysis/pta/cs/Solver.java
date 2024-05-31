@@ -32,13 +32,11 @@ import pascal.taie.analysis.pta.PointerAnalysisResult;
 import pascal.taie.analysis.pta.PointerAnalysisResultImpl;
 import pascal.taie.analysis.pta.core.cs.CSCallGraph;
 import pascal.taie.analysis.pta.core.cs.context.Context;
-import pascal.taie.analysis.pta.core.cs.element.ArrayIndex;
 import pascal.taie.analysis.pta.core.cs.element.CSCallSite;
 import pascal.taie.analysis.pta.core.cs.element.CSManager;
 import pascal.taie.analysis.pta.core.cs.element.CSMethod;
 import pascal.taie.analysis.pta.core.cs.element.CSObj;
 import pascal.taie.analysis.pta.core.cs.element.CSVar;
-import pascal.taie.analysis.pta.core.cs.element.InstanceField;
 import pascal.taie.analysis.pta.core.cs.element.MapBasedCSManager;
 import pascal.taie.analysis.pta.core.cs.element.Pointer;
 import pascal.taie.analysis.pta.core.cs.element.StaticField;
@@ -48,7 +46,6 @@ import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.analysis.pta.pts.PointsToSet;
 import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.config.AnalysisOptions;
-import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Copy;
 import pascal.taie.ir.stmt.Invoke;
@@ -58,7 +55,6 @@ import pascal.taie.ir.stmt.New;
 import pascal.taie.ir.stmt.StmtVisitor;
 import pascal.taie.ir.stmt.StoreArray;
 import pascal.taie.ir.stmt.StoreField;
-import pascal.taie.language.classes.JField;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.Type;
 
@@ -111,7 +107,10 @@ class Solver {
      * Processes new reachable context-sensitive method.
      */
     private void addReachable(CSMethod csMethod) {
-        // TODO - finish me
+        if (callGraph.addReachableMethod(csMethod)) {
+            StmtProcessor proc = new StmtProcessor(csMethod);
+            csMethod.getMethod().getIR().getStmts().forEach(s -> s.accept(proc));
+        }
     }
 
     /**
@@ -128,22 +127,108 @@ class Solver {
             this.context = csMethod.getContext();
         }
 
-        // TODO - if you choose to implement addReachable()
-        //  via visitor pattern, then finish me
+        @Override
+        public Void visit(New stmt) {
+            Obj obj = heapModel.getObj(stmt);
+            CSObj csObj = csManager.getCSObj(contextSelector.selectHeapContext(csMethod, obj), obj);
+            CSVar src = csManager.getCSVar(context, stmt.getLValue());
+            workList.addEntry(src, PointsToSetFactory.make(csObj));
+            return null;
+        }
+
+        @Override
+        public Void visit(Copy stmt) { // x = y
+            CSVar src = csManager.getCSVar(context, stmt.getRValue());
+            CSVar target = csManager.getCSVar(context, stmt.getLValue());
+            addPFGEdge(src, target);
+            return null;
+        }
+
+        @Override
+        public Void visit(LoadField stmt) {
+            if (!stmt.isStatic()) return null;
+            CSVar csY = csManager.getCSVar(context, stmt.getLValue());
+            StaticField src = csManager.getStaticField(stmt.getFieldRef().resolve());
+            addPFGEdge(src, csY);
+            return null;
+        }
+
+        @Override
+        public Void visit(StoreField stmt) {
+            if (!stmt.isStatic()) return null;
+            CSVar csY = csManager.getCSVar(context, stmt.getRValue());
+            StaticField target = csManager.getStaticField(stmt.getFieldRef().resolve());
+            addPFGEdge(csY, target);
+            return null;
+        }
+
+        @Override
+        public Void visit(Invoke stmt) {
+            if (!stmt.isStatic()) return null;
+            JMethod callee = stmt.getMethodRef().resolve();
+            CSCallSite csCallSite = csManager.getCSCallSite(context, stmt);
+            Context ctx = contextSelector.selectContext(csCallSite, callee);
+            CSMethod csMethod = csManager.getCSMethod(ctx, callee);
+
+            if (!callGraph.addEdge(new Edge<>(CallKind.STATIC, csCallSite, csMethod))) return null;
+            addReachable(csMethod);
+
+            for (int i = 0; i < stmt.getInvokeExp().getArgCount(); ++i) {
+                addPFGEdge(csManager.getCSVar(context, stmt.getInvokeExp().getArg(i)), csManager.getCSVar(ctx, callee.getIR().getParam(i)));
+            }
+
+            Var res = stmt.getResult();
+            if (res == null) return null;
+
+            for (Var retvar : callee.getIR().getReturnVars()) {
+                addPFGEdge(csManager.getCSVar(ctx, retvar), csManager.getCSVar(context, res));
+            }
+
+            return null;
+        }
     }
 
     /**
      * Adds an edge "source -> target" to the PFG.
      */
     private void addPFGEdge(Pointer source, Pointer target) {
-        // TODO - finish me
+        if (pointerFlowGraph.addEdge(source, target)) {
+            PointsToSet pts = source.getPointsToSet();
+            if (!pts.isEmpty()) {
+                workList.addEntry(target, pts);
+            }
+        }
     }
 
     /**
      * Processes work-list entries until the work-list is empty.
      */
     private void analyze() {
-        // TODO - finish me
+        while (!workList.isEmpty()) {
+            WorkList.Entry e = workList.pollEntry();
+            PointsToSet pts = e.pointsToSet();
+            Pointer ptn = e.pointer();
+            PointsToSet delta = propagate(ptn, pts);
+            if (ptn instanceof CSVar csVar) {
+                Var v = csVar.getVar();
+                for (CSObj o : delta) {
+                    for (StoreField sf : v.getStoreFields()) {
+                        addPFGEdge(csManager.getCSVar(csVar.getContext(), sf.getRValue()), csManager.getInstanceField(o, sf.getFieldRef().resolve()));
+                    }
+                    for (LoadField lf : v.getLoadFields()) {
+                        addPFGEdge(csManager.getInstanceField(o, lf.getFieldRef().resolve()), csManager.getCSVar(csVar.getContext(), lf.getLValue()));
+                    }
+
+                    for (StoreArray sa : v.getStoreArrays()) {
+                        addPFGEdge(csManager.getCSVar(csVar.getContext(), sa.getRValue()), csManager.getArrayIndex(o));
+                    }
+                    for (LoadArray la : v.getLoadArrays()) {
+                        addPFGEdge(csManager.getArrayIndex(o), csManager.getCSVar(csVar.getContext(), la.getLValue()));
+                    }
+                    processCall(csVar, o);
+                }
+            }
+        }
     }
 
     /**
@@ -151,8 +236,13 @@ class Solver {
      * returns the difference set of pointsToSet and pt(pointer).
      */
     private PointsToSet propagate(Pointer pointer, PointsToSet pointsToSet) {
-        // TODO - finish me
-        return null;
+        PointsToSet diff = PointsToSetFactory.make();
+        pointsToSet.objects().filter(obj -> !pointer.getPointsToSet().contains(obj)).forEach(diff::addObject);
+        if (!diff.isEmpty()) {
+            diff.forEach(o -> pointer.getPointsToSet().addObject(o));
+            pointerFlowGraph.getSuccsOf(pointer).forEach(succ -> workList.addEntry(succ, diff));
+        }
+        return diff;
     }
 
     /**
@@ -162,14 +252,37 @@ class Solver {
      * @param recvObj set of new discovered objects pointed by the variable.
      */
     private void processCall(CSVar recv, CSObj recvObj) {
-        // TODO - finish me
+        for (Invoke callSite : recv.getVar().getInvokes()) {
+            JMethod callee = resolveCallee(recvObj, callSite);
+            CSCallSite csCallSite = csManager.getCSCallSite(recv.getContext(), callSite);
+            Context ctx = contextSelector.selectContext(csCallSite, recvObj, callee);
+            CSMethod csMethod = csManager.getCSMethod(ctx, callee);
+            Pointer ths = csManager.getCSVar(ctx, callee.getIR().getThis());
+
+            workList.addEntry(ths, PointsToSetFactory.make(recvObj));
+
+            if (!callGraph.addEdge(new Edge<>(CallGraphs.getCallKind(callSite), csCallSite, csMethod))) continue;
+            addReachable(csMethod);
+
+            for (int i = 0; i < callSite.getInvokeExp().getArgCount(); ++i) {
+                addPFGEdge(csManager.getCSVar(recv.getContext(), callSite.getInvokeExp().getArg(i)), csManager.getCSVar(ctx, callee.getIR().getParam(i)));
+            }
+
+            Var res = callSite.getResult();
+            if (res == null) continue;
+
+            for (Var retvar : callee.getIR().getReturnVars()) {
+                addPFGEdge(csManager.getCSVar(ctx, retvar), csManager.getCSVar(recv.getContext(), res));
+            }
+
+        }
     }
 
     /**
      * Resolves the callee of a call site with the receiver object.
      *
-     * @param recv the receiver object of the method call. If the callSite
-     *             is static, this parameter is ignored (i.e., can be null).
+     * @param recv     the receiver object of the method call. If the callSite
+     *                 is static, this parameter is ignored (i.e., can be null).
      * @param callSite the call site to be resolved.
      * @return the resolved callee.
      */
